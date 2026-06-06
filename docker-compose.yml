@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fnp_notary
+      POSTGRES_USER: fnp
+      POSTGRES_PASSWORD: fnp_password
+    ports: ['5432:5432']
+    volumes: ['postgres_data:/var/lib/postgresql/data']
+  ipfs:
+    image: ipfs/kubo:v0.27.0
+    ports: ['4001:4001', '5001:5001', '8080:8080']
+    volumes: ['ipfs_data:/data/ipfs']
+  blockchain:
+    image: ethereum/client-go:stable
+    command: ['--dev', '--http', '--http.addr=0.0.0.0', '--http.api=eth,net,web3,personal,miner', '--http.corsdomain=*']
+    ports: ['8545:8545']
+    volumes: ['chain_data:/root/.ethereum']
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      PORT: 3001
+      RPC_URL: http://blockchain:8545
+      DATABASE_URL: postgresql://fnp:fnp_password@postgres:5432/fnp_notary
+      IPFS_API_URL: http://ipfs:5001
+      JWT_SECRET: change-me-in-production
+    ports: ['3001:3001']
+    depends_on: [postgres, ipfs, blockchain]
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+    ports: ['3000:3000']
+    depends_on: [backend]
+volumes:
+  postgres_data:
+  ipfs_data:
+  chain_data:
