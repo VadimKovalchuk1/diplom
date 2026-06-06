@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  FEDERAL_CHAMBER_ADMIN
+  REGIONAL_CHAMBER_ADMIN
+  NOTARY
+  AUDITOR
+  VERIFIER
+}
+
+enum DocumentStatus {
+  PENDING_ON_CHAIN
+  ACTIVE
+  REVOKED
+}
+
+model User {
+  id          String   @id @default(uuid())
+  wallet      String   @unique
+  fullName    String
+  chamberCode String
+  roles       Role[]
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  documents   Document[]
+}
+
+model Document {
+  id           String         @id @default(uuid())
+  documentId   String         @unique
+  documentHash String
+  metadataHash String?
+  cid          String
+  status       DocumentStatus @default(PENDING_ON_CHAIN)
+  txHash       String?
+  notaryId     String
+  notary       User           @relation(fields: [notaryId], references: [id])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model AuditEntry {
+  id        String   @id @default(uuid())
+  actorId   String
+  action    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model RegionalRequest {
+  id          String   @id @default(uuid())
+  documentId  String
+  fromChamber String
+  toChamber   String
+  status      String   @default("CREATED")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
