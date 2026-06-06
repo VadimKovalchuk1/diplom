@@ -1,0 +1,124 @@
+%% ============================================================================
+%% Mermaid-код структурной диаграммы разработанной системы.
+%% Его можно вставить в Markdown, Mermaid Live Editor или преобразовать в PNG/SVG:
+%%   npx @mermaid-js/mermaid-cli -i docs/diagrams/system-structure.mmd -o system-structure.svg
+%% ============================================================================
+flowchart TB
+  %% --------------------------------------------------------------------------
+  %% Пользователи и роли
+  %% --------------------------------------------------------------------------
+  Notary["Нотариус\nNOTARY"]
+  FederalAdmin["Администратор ФНП\nSUPER_ADMIN / FEDERAL_ADMIN"]
+  RegionalAdmin["Администратор региона\nREGIONAL_ADMIN"]
+  Auditor["Аудитор\nAUDITOR"]
+  PublicVerifier["Публичный проверяющий\nVERIFIER"]
+
+  %% --------------------------------------------------------------------------
+  %% Frontend layer
+  %% --------------------------------------------------------------------------
+  subgraph FE["Frontend Web Application\nNext.js + React + TailwindCSS"]
+    Login["Login Page\nwallet/JWT вход"]
+    Dashboard["Dashboard\nпоказатели"]
+    RegisterUI["Register Document UI\nзагрузка документа"]
+    VerifyUI["Verify Document UI\nпубличная проверка"]
+    AuditUI["Audit Logs UI\nаудит"]
+    RegionalUI["Regional Requests UI\nмежрегиональный обмен"]
+    AdminUI["Admin Panel\nроли и пользователи"]
+    ZkUI["ZK Verification UI\nzero-knowledge proof"]
+    Wallet["Wallet Connector\nMetaMask / EIP-1193"]
+  end
+
+  %% --------------------------------------------------------------------------
+  %% Backend layer
+  %% --------------------------------------------------------------------------
+  subgraph BE["Backend API\nNestJS + TypeScript"]
+    Auth["AuthModule\nnonce, wallet signature, JWT"]
+    Users["UsersModule\nучастники и роли"]
+    Documents["DocumentsModule\nhash, metadata, регистрация"]
+    IpfsModule["IpfsModule\nAES-256-GCM encryption"]
+    BlockchainModule["BlockchainModule\nethers.js JSON-RPC"]
+    Audit["AuditModule\nAPI audit trail"]
+    Regional["RegionalModule\nworkflow запросов"]
+    Zk["ZkModule\nproof generation/verification"]
+    Security["Guards & Interceptors\nRBAC, rate limit, audit"]
+  end
+
+  %% --------------------------------------------------------------------------
+  %% Infrastructure and storage
+  %% --------------------------------------------------------------------------
+  Postgres[("PostgreSQL\nоперационные read models")]
+  IPFS[("IPFS / Off-chain Storage\nзашифрованные документы")]
+  ZkRuntime["ZK Prover Runtime\nCircom + SnarkJS"]
+
+  %% --------------------------------------------------------------------------
+  %% Blockchain layer
+  %% --------------------------------------------------------------------------
+  subgraph CHAIN["Permissioned Ethereum-compatible Blockchain\nGeth dev для демо / Hyperledger Besu для enterprise"]
+    Access["NotaryAccessControl.sol\nRBAC on-chain"]
+    Registry["DocumentRegistry.sol\nhash, CID, timestamp, status"]
+    AuditContract["AuditContract.sol\nimmutable audit events"]
+    ZkVerifier["ZKVerifier.sol\nGroth16 verifier facade"]
+  end
+
+  %% Users -> Frontend
+  Notary --> FE
+  FederalAdmin --> FE
+  RegionalAdmin --> FE
+  Auditor --> FE
+  PublicVerifier --> FE
+
+  %% Frontend internals
+  Login --> Wallet
+  RegisterUI --> Wallet
+  ZkUI --> Wallet
+
+  %% Frontend -> Backend
+  FE -->|"HTTPS REST API /api/v1"| BE
+
+  %% Backend -> persistence
+  Auth --> Postgres
+  Users --> Postgres
+  Documents --> Postgres
+  Audit --> Postgres
+  Regional --> Postgres
+
+  %% Backend -> IPFS/ZK/Blockchain
+  Documents -->|"encrypt file"| IpfsModule
+  IpfsModule -->|"encrypted payload + CID"| IPFS
+  Documents --> BlockchainModule
+  BlockchainModule -->|"Ethereum JSON-RPC"| CHAIN
+  Zk --> ZkRuntime
+  Zk --> BlockchainModule
+  Security -.-> Auth
+  Security -.-> Users
+  Security -.-> Audit
+
+  %% Contract relations
+  Registry -->|"hasRole"| Access
+  Registry -->|"logAction"| AuditContract
+  AuditContract -->|"hasRole"| Access
+  ZkVerifier -->|"commitment/document proof"| Registry
+
+  %% Business flow: document registration
+  Notary -. "1. upload document" .-> RegisterUI
+  RegisterUI -. "2. POST /documents" .-> Documents
+  Documents -. "3. encrypt + CID" .-> IpfsModule
+  Documents -. "4. registerDocument" .-> Registry
+  Registry -. "5. audit event" .-> AuditContract
+
+  %% Business flow: public verification
+  PublicVerifier -. "1. documentId + hash" .-> VerifyUI
+  VerifyUI -. "2. POST /documents/verify" .-> Documents
+  Documents -. "3. verifyDocument" .-> Registry
+
+  classDef user fill:#FDF2F8,stroke:#BE185D,color:#111827
+  classDef frontend fill:#EFF6FF,stroke:#1D4ED8,color:#111827
+  classDef backend fill:#F0FDFA,stroke:#0F766E,color:#111827
+  classDef storage fill:#ECFDF5,stroke:#047857,color:#111827
+  classDef chain fill:#FEF3C7,stroke:#B45309,color:#111827
+
+  class Notary,FederalAdmin,RegionalAdmin,Auditor,PublicVerifier user
+  class Login,Dashboard,RegisterUI,VerifyUI,AuditUI,RegionalUI,AdminUI,ZkUI,Wallet frontend
+  class Auth,Users,Documents,IpfsModule,BlockchainModule,Audit,Regional,Zk,Security backend
+  class Postgres,IPFS,ZkRuntime storage
+  class Access,Registry,AuditContract,ZkVerifier chain
