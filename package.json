@@ -1,0 +1,15 @@
+{
+  "name": "fnp-notary-blockchain-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Enterprise distributed notarial document workflow platform with Ethereum-compatible blockchain and zero-knowledge verification.",
+  "workspaces": ["apps/backend", "apps/frontend", "apps/blockchain", "apps/zk"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {"node": ">=20.0.0"},
+  "license": "MIT"
+}
