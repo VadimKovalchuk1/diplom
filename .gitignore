@@ -1,0 +1,14 @@
+node_modules
+.env
+.env.local
+dist
+.next
+coverage
+artifacts
+cache
+typechain-types
+*.zkey
+*.wtns
+*.r1cs
+*.sym
+.DS_Store
