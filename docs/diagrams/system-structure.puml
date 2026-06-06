@@ -1,0 +1,173 @@
+@startuml FNP_Notary_Blockchain_System_Structure
+' ============================================================================
+' PlantUML-код структурной диаграммы разработанной системы.
+' Этот файл можно преобразовать в PNG/SVG через PlantUML:
+'   plantuml -tpng docs/diagrams/system-structure.puml
+'   plantuml -tsvg docs/diagrams/system-structure.puml
+'
+' Что показывает диаграмма:
+' - пользователей системы;
+' - frontend, backend, blockchain, IPFS, PostgreSQL и ZK-модуль;
+' - основные backend-модули;
+' - smart contracts;
+' - направления взаимодействия между компонентами.
+' ============================================================================
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam wrapWidth 220
+skinparam maxMessageSize 220
+skinparam defaultFontName Arial
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #1F2937
+skinparam component {
+  BackgroundColor #EFF6FF
+  BorderColor #1D4ED8
+  FontColor #111827
+}
+skinparam database {
+  BackgroundColor #ECFDF5
+  BorderColor #047857
+}
+skinparam node {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #CBD5E1
+  FontColor #0F172A
+}
+
+title Структура распределённой blockchain-системы нотариального документооборота ФНП
+
+' ----------------------------------------------------------------------------
+' Участники системы. Это не программные модули, а роли людей/организаций.
+' ----------------------------------------------------------------------------
+actor "Нотариус\nNOTARY" as Notary
+actor "Администратор ФНП\nSUPER_ADMIN / FEDERAL_ADMIN" as FederalAdmin
+actor "Администратор региона\nREGIONAL_ADMIN" as RegionalAdmin
+actor "Аудитор\nAUDITOR" as Auditor
+actor "Публичный проверяющий\nVERIFIER" as PublicVerifier
+
+' ----------------------------------------------------------------------------
+' Frontend-приложение. Это web-интерфейс, через который работают пользователи.
+' ----------------------------------------------------------------------------
+node "Frontend Web Application\nNext.js + React + TailwindCSS" as FrontendNode {
+  component "Login Page\nWallet/JWT вход" as LoginPage
+  component "Dashboard\nоперационные показатели" as DashboardPage
+  component "Register Document UI\nзагрузка и регистрация" as RegisterPage
+  component "Verify Document UI\nпубличная проверка" as VerifyPage
+  component "Audit Logs UI\nпросмотр аудита" as AuditPage
+  component "Regional Requests UI\nмежрегиональный обмен" as RegionalPage
+  component "Admin Panel\nпользователи и роли" as AdminPage
+  component "ZK Verification UI\nzero-knowledge proof" as ZkPage
+  component "Wallet Connector\nMetaMask / EIP-1193" as WalletConnector
+}
+
+' ----------------------------------------------------------------------------
+' Backend API. Это прикладной слой, который связывает UI, БД, IPFS, ZK и blockchain.
+' ----------------------------------------------------------------------------
+node "Backend API\nNestJS + TypeScript" as BackendNode {
+  component "AuthModule\nnonce, wallet signature, JWT" as AuthModule
+  component "UsersModule\nучастники и роли" as UsersModule
+  component "DocumentsModule\nhash, metadata, регистрация" as DocumentsModule
+  component "IpfsModule\nAES-256-GCM encryption" as IpfsModule
+  component "BlockchainModule\nethers.js JSON-RPC" as BlockchainModule
+  component "AuditModule\nAPI audit trail" as AuditModule
+  component "RegionalModule\nworkflow запросов" as RegionalModule
+  component "ZkModule\nproof generation/verification" as ZkModule
+  component "Guards & Interceptors\nRBAC, rate limit, audit" as SecurityLayer
+}
+
+' ----------------------------------------------------------------------------
+' Хранилища и внешняя инфраструктура.
+' ----------------------------------------------------------------------------
+database "PostgreSQL\nоперационные read models" as Postgres
+node "IPFS / Off-chain Storage\nтолько зашифрованные документы" as IpfsStorage
+node "ZK Prover Runtime\nCircom + SnarkJS" as ZkRuntime
+
+' ----------------------------------------------------------------------------
+' Blockchain-сеть. Для демонстрации это geth --dev, для enterprise — Besu/QBFT.
+' ----------------------------------------------------------------------------
+node "Permissioned Ethereum-compatible Blockchain\nGeth dev для демо / Hyperledger Besu для enterprise" as BlockchainNode {
+  component "NotaryAccessControl.sol\nRBAC on-chain" as AccessContract
+  component "DocumentRegistry.sol\nhash, CID, timestamp, status" as RegistryContract
+  component "AuditContract.sol\nimmutable audit events" as AuditContract
+  component "ZKVerifier.sol\nGroth16 verifier facade" as ZkVerifierContract
+}
+
+' ----------------------------------------------------------------------------
+' Связи пользователей с frontend.
+' ----------------------------------------------------------------------------
+Notary --> FrontendNode : работает с документами
+FederalAdmin --> FrontendNode : управляет системой
+RegionalAdmin --> FrontendNode : управляет регионом
+Auditor --> FrontendNode : проверяет аудит
+PublicVerifier --> FrontendNode : проверяет подлинность
+
+' ----------------------------------------------------------------------------
+' Внутренние frontend-связи.
+' ----------------------------------------------------------------------------
+LoginPage --> WalletConnector : запрос подписи nonce
+RegisterPage --> WalletConnector : подпись blockchain transaction
+ZkPage --> WalletConnector : подтверждение операции
+
+' ----------------------------------------------------------------------------
+' Frontend обращается к backend по REST API.
+' ----------------------------------------------------------------------------
+FrontendNode --> BackendNode : HTTPS REST API\n/api/v1/*
+
+' ----------------------------------------------------------------------------
+' Backend-модули взаимодействуют с инфраструктурой.
+' ----------------------------------------------------------------------------
+AuthModule --> Postgres : пользователи, роли, nonce\nproduction вариант
+UsersModule --> Postgres : users, role assignments
+DocumentsModule --> Postgres : document read model
+AuditModule --> Postgres : API audit entries
+RegionalModule --> Postgres : regional requests
+
+DocumentsModule --> IpfsModule : передать файл на шифрование
+IpfsModule --> IpfsStorage : сохранить encrypted payload\nполучить CID
+DocumentsModule --> BlockchainModule : подготовить/проверить tx
+BlockchainModule --> BlockchainNode : Ethereum JSON-RPC\neth_call / eth_sendRawTransaction
+ZkModule --> ZkRuntime : создать proof из witness
+ZkModule --> BlockchainModule : проверить proof on-chain
+
+SecurityLayer ..> AuthModule : JWT authentication
+SecurityLayer ..> UsersModule : RBAC permissions
+SecurityLayer ..> AuditModule : автоматическая запись аудита
+
+' ----------------------------------------------------------------------------
+' Smart contracts зависят друг от друга логически.
+' ----------------------------------------------------------------------------
+RegistryContract --> AccessContract : hasRole(NOTARY/AUDITOR)
+RegistryContract --> AuditContract : logAction(...)
+AuditContract --> AccessContract : hasRole(AUDITOR/NOTARY)
+ZkVerifierContract --> RegistryContract : проверка commitment\nпо documentHash/CID metadata
+
+' ----------------------------------------------------------------------------
+' Основной бизнес-поток регистрации документа.
+' ----------------------------------------------------------------------------
+Notary -[#2563EB,dashed]-> RegisterPage : 1. загружает документ
+RegisterPage -[#2563EB,dashed]-> DocumentsModule : 2. POST /documents
+DocumentsModule -[#2563EB,dashed]-> IpfsModule : 3. encrypt + CID
+DocumentsModule -[#2563EB,dashed]-> RegistryContract : 4. registerDocument\nhash + metadataHash + CID
+RegistryContract -[#2563EB,dashed]-> AuditContract : 5. immutable audit event
+
+' ----------------------------------------------------------------------------
+' Основной бизнес-поток публичной проверки.
+' ----------------------------------------------------------------------------
+PublicVerifier -[#059669,dashed]-> VerifyPage : 1. вводит documentId/hash
+VerifyPage -[#059669,dashed]-> DocumentsModule : 2. POST /documents/verify
+DocumentsModule -[#059669,dashed]-> RegistryContract : 3. verifyDocument(...)
+RegistryContract -[#059669,dashed]-> VerifyPage : 4. valid/invalid
+
+legend right
+  |= Цвет/тип связи |= Значение |
+  | обычная стрелка | архитектурная зависимость |
+  | синяя пунктирная | регистрация документа |
+  | зелёная пунктирная | публичная проверка документа |
+endlegend
+
+@enduml
